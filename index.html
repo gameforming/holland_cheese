@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="nl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#101923" />
+  <meta name="description" content="Holland_Game — verdien Kaasmunten, bouw bedrijven en handel in Nederlandse verzamelobjecten." />
+  <link rel="icon" type="image/svg+xml" href="./assets/cheese-coin.svg" />
+  <link rel="stylesheet" href="./styles.css" />
+  <title>Holland_Game</title>
+</head>
+<body>
+  <div class="app-shell">
+    <header class="topbar">
+      <a class="brand" href="#work" aria-label="Holland Game start">
+        <span class="brand-coin"><img src="./assets/cheese-coin.svg" alt="" /></span>
+        <span><strong>HOLLAND<span>_GAME</span></strong><small>Van nul naar Nederlands imperium</small></span>
+      </a>
+      <div class="topbar-right">
+        <div class="wallet"><img src="./assets/cheese-coin.svg" alt="" /><span><strong id="balance">0,00</strong><small>Kaasmunten</small></span></div>
+        <button class="profile-button" id="profileButton" type="button" title="Profiel aanpassen"><span class="avatar" id="avatar">N</span><span id="usernameLabel">Nieuwe Speler</span><span class="chevron">⌄</span></button>
+      </div>
+    </header>
+
+    <section class="stats-strip" aria-label="Spelstatistieken">
+      <div class="stat"><span class="stat-icon">📈</span><span><small>Bedrijfsinkomen / 5 min</small><strong id="incomeStat">0,00 KM</strong></span></div>
+      <div class="stat"><span class="stat-icon">🏢</span><span><small>Bedrijven</small><strong id="companyStat">0</strong></span></div>
+      <div class="stat"><span class="stat-icon">🏆</span><span><small>Totaal verdiend</small><strong id="earnedStat">0,00 KM</strong></span></div>
+      <div class="stat next-pay"><span class="stat-icon">⏱️</span><span><small>Volgende salarisronde</small><strong id="payoutTimer">05:00</strong></span></div>
+    </section>
+
+    <nav class="tabs" aria-label="Hoofdnavigatie">
+      <button class="tab active" data-tab="work" type="button"><span>🎮</span>Work</button>
+      <button class="tab" data-tab="companies" type="button"><span>🏢</span>Companies</button>
+      <button class="tab" data-tab="market" type="button"><span>📊</span>Holland_Market</button>
+      <button class="tab" data-tab="crates" type="button"><span>🎁</span>Crates</button>
+      <button class="tab" data-tab="ah" type="button"><span>🤝</span>Holland_AH</button>
+      <button class="tab" data-tab="leaderboard" type="button"><span>🏆</span>Leaderboard</button>
+    </nav>
+
+    <main id="tabContent" class="main-content" tabindex="-1"></main>
+    <footer class="footer"><span>Holland_Game <b>•</b> economy prototype</span><span id="connectionStatus" class="connection"><i></i> Lokale demo</span></footer>
+  </div>
+
+  <div id="modalRoot"></div>
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+  <script src="./config.js"></script>
+  <script src="./js/catalog.js"></script>
+  <script src="./js/app.js" defer></script>
+</body>
+</html>

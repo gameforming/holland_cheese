@@ -1,0 +1,15 @@
+HOLLAND_GAME 2.0 — REPLACE THE OLD FACTORY PROTOTYPE
+
+This is now a plain static website. It does NOT use Vite, React, npm install, or a dist/ folder.
+
+When replacing the old repository:
+1. Remove the old src/ directory.
+2. Remove the old public/ directory (the new coin icon is in assets/).
+3. Remove package.json, package-lock.json, vite.config.ts and tsconfig*.json if present.
+4. Remove old .github/workflows/deploy.yml and .github/workflows/ci.yml if they still deploy a Vite dist/ folder.
+5. Copy the contents of this ZIP into the repository root. index.html must be directly in the root.
+6. On GitHub, open Settings > Pages > Build and deployment.
+7. Choose Deploy from a branch, branch main, folder /(root), then Save.
+8. Wait for the Pages deployment to finish and reload the Pages URL.
+
+The game starts at 0 Kaasmunten. Use the Work minigames to earn the first money.
