@@ -329,26 +329,78 @@
       }).join('') || `<div class="empty-state" style="grid-column:1/-1"><div class="empty-icon">🔎</div><b>Geen bedrijven gevonden</b><p>Probeer een andere zoekterm of sector.</p></div>`}</div>`;
   }
 
+  const MARKET_TICK_MS = 30 * 1000;
+  const MARKET_HISTORY_INTERVAL_MS = 5 * 60 * 1000;
+  const MARKET_HISTORY_LIMIT = 289; // roughly 24 hours, sampled every five minutes
+  const MARKET_MAX_CATCHUP_TICKS = 30 * 24 * 60 * 2; // up to 30 offline days
+
   function marketChange(id) {
-    const history = state.marketHistory[id] || [];
-    if (history.length < 2) return 0;
-    const first = history[history.length-2], last = history[history.length-1];
-    return first ? ((last-first)/first)*100 : 0;
+    const asset = C.marketAssets.find(item => item.id === id);
+    if (!asset) return 0;
+    const currentPrice = Number(state.marketPrices[id]) || asset.price;
+    const history = Array.isArray(state.marketHistory[id]) ? state.marketHistory[id] : [];
+    if (!history.length) return 0;
+
+    const normalized = history.map((point, index) => {
+      if (typeof point === 'number') {
+        return { at: now() - (history.length - 1 - index) * MARKET_HISTORY_INTERVAL_MS, price: point };
+      }
+      return { at: Number(point?.at) || 0, price: Number(point?.price) || 0 };
+    }).filter(point => point.price > 0);
+    if (!normalized.length) return 0;
+
+    const cutoff = now() - 24 * 60 * 60 * 1000;
+    const baseline = normalized.find(point => point.at >= cutoff) || normalized[0];
+    return baseline.price ? ((currentPrice - baseline.price) / baseline.price) * 100 : 0;
   }
+
+  // The market is a local simulation: price movement is saved with the local game.
+  // Elapsed ticks are replayed on return, so it also advances while the browser is closed.
   function updateMarketPrices() {
-    const ticks=Math.floor((now()-state.marketUpdatedAt)/30000);
-    if (ticks<=0) return;
-    C.marketAssets.forEach(asset=>{
-      let price=Number(state.marketPrices[asset.id])||asset.price;
-      const steps=Math.min(ticks,100);
-      for(let i=0;i<steps;i++) price=clamp(price*(1+(Math.random()-.48)*.075),asset.price*.25,asset.price*4.5);
-      state.marketPrices[asset.id]=Math.round(price*100)/100;
-      const history=state.marketHistory[asset.id]||[asset.price];
-      history.push(state.marketPrices[asset.id]);
-      state.marketHistory[asset.id]=history.slice(-20);
+    const current = now();
+    const elapsedTicks = Math.floor((current - (Number(state.marketUpdatedAt) || current)) / MARKET_TICK_MS);
+    if (elapsedTicks <= 0) return false;
+
+    const ticks = Math.min(elapsedTicks, MARKET_MAX_CATCHUP_TICKS);
+    const simulationStart = elapsedTicks > MARKET_MAX_CATCHUP_TICKS
+      ? current - ticks * MARKET_TICK_MS
+      : Number(state.marketUpdatedAt) || current;
+
+    C.marketAssets.forEach((asset, assetIndex) => {
+      let price = Number(state.marketPrices[asset.id]) || asset.price;
+      const rawHistory = Array.isArray(state.marketHistory[asset.id]) ? state.marketHistory[asset.id] : [];
+      let history = rawHistory.map((point, index) => {
+        if (typeof point === 'number') {
+          return { at: simulationStart - (rawHistory.length - 1 - index) * MARKET_TICK_MS, price: point };
+        }
+        return { at: Number(point?.at) || simulationStart, price: Number(point?.price) || asset.price };
+      }).filter(point => point.price > 0);
+
+      if (!history.length) history.push({ at: simulationStart, price });
+      let lastSnapshotAt = history[history.length - 1].at;
+      const volatility = Number(asset.volatility) || 0.05;
+
+      for (let step = 1; step <= ticks; step++) {
+        const tickAt = simulationStart + step * MARKET_TICK_MS;
+        const shock = (Math.random() - 0.5) * volatility;
+        const suddenNews = Math.random() < 0.006 ? (Math.random() - 0.5) * volatility * 3.2 : 0;
+        const marketCycle = Math.sin((tickAt / 60000) + assetIndex * 2.13) * 0.0009;
+        const returnToFairValue = ((asset.price - price) / asset.price) * 0.0012;
+        price = clamp(price * (1 + shock + suddenNews + marketCycle + returnToFairValue), asset.price * 0.15, asset.price * 7);
+
+        if (tickAt - lastSnapshotAt >= MARKET_HISTORY_INTERVAL_MS) {
+          history.push({ at: tickAt, price: Math.round(price * 100) / 100 });
+          lastSnapshotAt = tickAt;
+        }
+      }
+
+      state.marketPrices[asset.id] = Math.round(price * 100) / 100;
+      state.marketHistory[asset.id] = history.slice(-MARKET_HISTORY_LIMIT);
     });
-    state.marketUpdatedAt += ticks*30000;
+
+    state.marketUpdatedAt = current - (current % MARKET_TICK_MS);
     save();
+    return true;
   }
   function renderMarket() {
     updateMarketPrices();
@@ -360,10 +412,10 @@
     return `
       <div class="page-heading"><div><div class="eyebrow">Holland_Market • fictieve handelsmarkt</div><h1>De Nederlandse markt</h1><p class="lede">Verhandel Nederlandse thema-items alsof het kleine crypto-tokens zijn. Prijzen bewegen automatisch; dit is speelgeld en geen echte crypto.</p></div><div class="panel soft"><small class="small-meta">Portfolio-waarde</small><h2 style="color:var(--orange2);margin:4px 0 0">${euro(holdingsTotal)}</h2><small class="small-meta">${Object.values(state.holdings).reduce((a,b)=>a+b,0)} tokens in bezit</small></div></div>
       <div class="tag-row" style="margin-bottom:13px">${origins.map(o=>`<button class="filter-chip ${marketFilter===o?'active':''}" data-action="market-filter" data-value="${o}">${o}</button>`).join('')}</div>
-      <div class="market-grid"><section class="panel"><div class="toolbar" style="justify-content:space-between"><h2>Tokenmarkt</h2><span class="pill">Koersen bewegen elke 30 sec</span></div><div style="overflow-x:auto"><table class="market-table"><thead><tr><th>Item</th><th>Prijs</th><th>24u*</th><th>In bezit</th><th>Actie</th></tr></thead><tbody>${assets.map(asset=>{
+      <div class="market-grid"><section class="panel"><div class="toolbar" style="justify-content:space-between"><h2>Tokenmarkt</h2><span class="pill">Nieuwe koersen elke 30 sec • ook offline</span></div><div style="overflow-x:auto"><table class="market-table"><thead><tr><th>Item</th><th>Prijs</th><th>24u</th><th>In bezit</th><th>Actie</th></tr></thead><tbody>${assets.map(asset=>{
         const price=Number(state.marketPrices[asset.id])||asset.price;const change=marketChange(asset.id);const qty=Number(state.holdings[asset.id])||0;
         return `<tr><td><div class="asset-name"><span class="asset-emoji">${asset.icon}</span><span><b>${asset.name}</b><small>${asset.origin}</small></span></div></td><td><b>${euro(price)}</b></td><td class="${change>=0?'positive':'negative'}">${change>=0?'+':''}${change.toFixed(1)}%</td><td>${qty}</td><td><div class="toolbar"><button class="btn tiny" data-action="market-buy" data-id="${asset.id}" ${state.balance>=cents(price)?'':'disabled'}>Koop</button><button class="btn tiny secondary" data-action="market-sell" data-id="${asset.id}" ${qty>0?'':'disabled'}>Verkoop</button></div></td></tr>`;
-      }).join('')}</tbody></table></div><p class="hint" style="margin:12px 0 0">*De verandering is sinds de vorige koersupdate in jouw lokale spelbestand, geen echte 24-uurskoers.</p></section>
+      }).join('')}</tbody></table></div><p class="hint" style="margin:12px 0 0">De procentuele verandering vergelijkt de koers met ongeveer 24 uur geleden. Prijzen zijn fictief, worden lokaal opgeslagen en lopen door wanneer je later terugkomt.</p></section>
       <aside class="panel"><div class="eyebrow">Mijn portefeuille</div><h2>Jouw tokens</h2>${Object.entries(state.holdings).filter(([,qty])=>qty>0).length?Object.entries(state.holdings).filter(([,qty])=>qty>0).map(([id,qty])=>{const a=C.marketAssets.find(x=>x.id===id);return `<div class="portfolio-row"><span>${a?.icon||'📦'} ${a?.name||id} <small class="small-meta">× ${qty}</small></span><b>${euro((state.marketPrices[id]||a?.price||0)*qty)}</b></div>`}).join(''):`<div class="empty-state"><div class="empty-icon">📉</div><b>Nog geen tokens</b><p>Koop een Nederlands thema-item om je portefeuille te starten.</p></div>`}</aside></div>`;
   }
 
@@ -923,10 +975,9 @@
   setInterval(()=>{
     settlePayouts();
     updateHeader();
-    if(activeTab==='market'){
-      const old=state.marketUpdatedAt;updateMarketPrices();
-      if(state.marketUpdatedAt!==old)renderTab();
-    }
+    const oldMarketUpdate=state.marketUpdatedAt;
+    updateMarketPrices();
+    if(activeTab==='market' && state.marketUpdatedAt!==oldMarketUpdate) renderTab();
   },1000);
   setInterval(async()=>{
     if(!supabaseUrl || !supabaseSession || document.visibilityState==='hidden' || cloudSaveBusy) return;

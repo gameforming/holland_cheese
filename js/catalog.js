@@ -62,8 +62,74 @@
     ['telecom','📡','Telecomprovider','Technologie','Mobiele netwerken en glasvezel.','130000000',495000.00],
     ['exchange','📈','Beursplatform','Financiën','Een groot digitaal handelsplatform.','180000000',690000.00],
     ['globalai','🦾','AI Research Corporation','Technologie','Train grote AI-modellen en bouw datacenters.','250000000',970000.00],
-    ['conglomerate','🌐','Holland Global Group','Conglomeraat','Een internationaal concern met tientallen divisies.','350000000',1380000.00]
-  ].map(([id,icon,name,category,description,cost,income]) => ({id,icon,name,category,description,cost:Number(cost),income:Number(income)}));
+    ['conglomerate','🌐','Holland Global Group','Conglomeraat','Een internationaal concern met tientallen divisies.','350000000',1380000.00],
+
+    // Extra keuze in iedere fase: kleine lokale ondernemingen tot wereldconcerns.
+    ['dogwalk','🐕','Hondenuitlaatservice','Dienstverlening','Laat honden uit in de buurt en bouw een vaste klantenkring op.',75,.55],
+    ['babysit','🧸','Oppasbureau','Dienstverlening','Koppel gezinnen aan betrouwbare oppassers.',110,.75],
+    ['carwash','🚗','Mobiele autowas','Dienstverlening','Was autos bij mensen thuis of op kantoor.',145,.95],
+    ['newspaper','🗞️','Krantenbezorgdienst','Logistiek','Bezorg lokale kranten en folders in de wijk.',190,1.15],
+    ['shoe-repair','👞','Schoenenmaker','Dienstverlening','Repareer schoenen en maak leren producten.',260,1.45],
+    ['market-flower','🌻','Bloemenfiets','Retail','Verkoop boeketten vanuit een mobiele bloemenfiets.',340,1.8],
+    ['icecream','🍦','IJskraam','Horeca','Verkoop ijs op drukke plekken en evenementen.',480,2.35],
+    ['petshop','🐾','Dierenwinkel','Retail','Verkoop voer, speeltjes en benodigdheden voor huisdieren.',720,3.1],
+    ['repair-cafe','🪛','Repair-café','Dienstverlening','Repareer kleine apparaten en huishoudelijke spullen.',980,4.1],
+    ['lunchroom','🥪','Broodjeszaak','Horeca','Maak lunch voor scholieren, studenten en kantoren.',1350,5.2],
+    ['bike-rental','🚲','Fietsverhuur','Toerisme','Verhuur fietsen aan bezoekers en dagjesmensen.',1850,6.8],
+    ['laundromat','🧺','Wasserette','Dienstverlening','Was en droog kleding voor buurtbewoners.',2450,8.7],
+    ['barbershop','💈','Barbershop','Dienstverlening','Een moderne herenkapper met vaste klanten.',3300,11.2],
+    ['pizza','🍕','Pizzeria','Horeca','Bezorg pizza en run een klein restaurant.',4400,14.5],
+    ['bakery-cafe','🍰','Lunch- en gebakcafé','Horeca','Combineer een bakkerij met een gezellig café.',5900,18.7],
+    ['plumbing-emergency','🚿','Spoedloodgieter','Bouw','Los lekkages en storingen op, ook buiten kantooruren.',7600,24.5],
+    ['solar-installer','☀️','Zonnepaneleninstallateur','Energie','Plaats zonnepanelen en laadoplossingen.',9900,31.0],
+    ['garden-center','🪴','Tuincentrum','Retail','Verkoop planten, gereedschap en tuinmeubels.',12800,40.0],
+    ['restaurant','🍽️','Familierestaurant','Horeca','Een groter restaurant met bediening en terras.',16500,52.0],
+    ['event-agency','🎟️','Evenementenbureau','Entertainment','Organiseer festivals, beurzen en bedrijfsfeesten.',21500,68.0],
+
+    ['accountancy','🧾','Administratiekantoor','Financiën','Verzorg boekhouding en salarisadministratie voor mkb.',28000,88.0],
+    ['it-support','🖥️','IT-supportbedrijf','Technologie','Beheer computers, netwerken en werkplekken.',36000,115.0],
+    ['security','🦺','Beveiligingsbedrijf','Dienstverlening','Lever beveiligers en toegangscontrole aan bedrijven.',47000,150.0],
+    ['recycling','♻️','Recyclingbedrijf','Industrie','Verzamel en verwerk recyclebare materialen.',61000,195.0],
+    ['greenhouse','🏡','Glas-tuinkassenbedrijf','Landbouw','Kweek groenten en bloemen in moderne kassen.',79000,255.0],
+    ['cheese-free-dairy','🥛','Zuivelfabriek','Productie','Verwerk melk tot zuivelproducten voor winkels en horeca.',102000,330.0],
+    ['brewery','🍺','Brouwerij','Productie','Brouw dranken voor horeca en winkels.',132000,430.0],
+    ['printing','🖨️','Drukkerij','Productie','Druk verpakkingen, boeken en promotiemateriaal.',171000,555.0],
+    ['clinic','🏥','Privékliniek','Gezondheidszorg','Bied planbare behandelingen en specialistische zorg.',222000,720.0],
+    ['care-home','🧑‍⚕️','Zorgorganisatie','Gezondheidszorg','Organiseer thuiszorg en ondersteuning.',288000,940.0],
+    ['realestate-agency','🏘️','Makelaarskantoor','Vastgoed','Bemiddel bij woningen, kantoren en bedrijfspanden.',375000,1230.0],
+    ['warehouse','🏬','Distributiecentrum','Logistiek','Sla goederen op en verwerk bestellingen.',490000,1610.0],
+    ['solar-farm','🌞','Zonnepark','Energie','Produceer duurzame stroom op grote schaal.',640000,2120.0],
+    ['data-consultancy','📊','Data-adviesbureau','Technologie','Help bedrijven data analyseren en benutten.',830000,2780.0],
+    ['app-studio','📱','App-ontwikkelstudio','Technologie','Ontwikkel mobiele apps voor consumenten en bedrijven.',1080000,3650.0],
+    ['drone-company','🛸','Dronediensten','Technologie','Voer inspecties, metingen en luchtbeelden uit.',1400000,4800.0],
+    ['vr-studio','🥽','VR-ontwikkelstudio','Entertainment','Bouw virtuele ervaringen en trainingssimulaties.',1820000,6250.0],
+    ['robot-maintenance','🦾','Robotic onderhoudsbedrijf','Industrie','Onderhoud industriële robots en productielijnen.',2370000,8200.0],
+    ['aquaculture','🐟','Aquacultuurbedrijf','Landbouw','Kweek vis en schaalproducten met moderne systemen.',3080000,10800.0],
+    ['food-factory','🥫','Voedselfabriek','Productie','Produceer en verpak levensmiddelen op grote schaal.',4000000,14100.0],
+    ['pharmacy-chain','💊','Apothekenketen','Gezondheidszorg','Beheer apotheken en medicijnlogistiek.',5200000,18400.0],
+    ['sports-network','🏟️','Sport- en fitnessketen','Sport','Beheer sportscholen, sporthallen en trainingscentra.',6750000,24100.0],
+    ['streaming','📺','Streamingplatform','Media','Bied films, series en live-evenementen aan.',8750000,31500.0],
+    ['insurance','🛡️','Verzekeringsmaatschappij','Financiën','Verzeker particulieren en zakelijke klanten.',11400000,41200.0],
+    ['rail-freight','🚆','Spoorgoederenvervoer','Transport','Vervoer containers en bulkgoederen per spoor.',14800000,54000.0],
+    ['airport-services','🛬','Luchthavenbedrijf','Transport','Verzorg afhandeling, bagage en vliegtuigservices.',19200000,70500.0],
+
+    ['offshore-wind','🌊','Offshore windbedrijf','Energie','Bouw en beheer windparken op zee.',25000000,92000.0],
+    ['semiconductor-tools','⚙️','Chipmachineproducent','Industrie','Bouw uiterst precieze machines voor chipfabrieken.',32500000,121000.0],
+    ['quantum-lab','⚛️','Quantumcomputerlab','Wetenschap','Ontwikkel quantumhardware en gespecialiseerde software.',42300000,159000.0],
+    ['ai-platform','🧠','AI-platformbedrijf','Technologie','Lever AI-infrastructuur en modellen aan ondernemingen.',55000000,208000.0],
+    ['biomedical','🧬','Biomedisch concern','Wetenschap','Ontwikkel medische technologie en diagnostiek.',71500000,272000.0],
+    ['satellite-network','🛰️','Satellietnetwerk','Wetenschap','Beheer communicatiesatellieten en aardobservatie.',93000000,355000.0],
+    ['national-grid','🔌','Hoogspanningsnetbeheerder','Energie','Beheer energieverbindingen en elektriciteitsnetten.',121000000,465000.0],
+    ['global-logistics','🌍','Wereldwijd logistiek concern','Logistiek','Verbind havens, magazijnen en transportnetwerken.',157000000,608000.0],
+    ['cloud-ai','☁️','AI-cloudprovider','Technologie','Lever wereldwijde AI-rekenkracht en cloudplatforms.',204000000,795000.0],
+    ['robot-factory','🏭','Autonome robotfabrieken','Industrie','Produceer robots en volledig geautomatiseerde productielijnen.',265000000,1030000.0],
+    ['global-bank','🏦','Wereldbankgroep','Financiën','Financier internationale bedrijven en infrastructuur.',345000000,1340000.0],
+    ['telecom-satellite','📡','Satelliettelecomconcern','Technologie','Combineer mobiele netwerken, glasvezel en satellietinternet.',448000000,1750000.0],
+    ['fusion-energy','☢️','Fusie-energiebedrijf','Energie','Onderzoek en bouw experimentele fusiecentrales.',582000000,2280000.0],
+    ['global-media','🎬','Wereldwijd mediaconglomeraat','Media','Beheer internationale studio’s, streaming en nieuwsmerken.',756000000,2980000.0],
+    ['planetary-mining','🪐','Ruimtegrondstoffenbedrijf','Wetenschap','Ontwikkel technologie voor winning van grondstoffen in de ruimte.',982000000,3890000.0],
+    ['holland-megacorp','👑','Holland Mega Corporation','Conglomeraat','Een gigantische groep met bedrijven in vrijwel iedere sector.',1275000000,5100000.0]
+  ].map(([id,icon,name,category,description,cost,income]) => ({id,icon,name,category,description,cost:Number(cost),income:Number(income)})).sort((a,b)=>a.cost-b.cost);
 
   const marketAssets = [
     {id:'tulip-token',icon:'🌷',name:'Tulpen-token',origin:'Bollenstreek',price:12.5},
@@ -78,7 +144,7 @@
     {id:'wors-token',icon:'🥖',name:'Worstenbrood-token',origin:'Noord-Brabant',price:9.25},
     {id:'skutsje-token',icon:'⛵',name:'Skûtsje-token',origin:'Friesland',price:32},
     {id:'brabant-token',icon:'🎡',name:'Bossche Kermis-token',origin:'Noord-Brabant',price:14.25}
-  ];
+  ].map((asset,index)=>({...asset, volatility:0.045 + (index % 5) * 0.006}));
 
   const rarities = {
     common:{label:'Common',className:'common',color:'#bac6d2',value:5},
