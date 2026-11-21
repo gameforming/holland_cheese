@@ -39,6 +39,8 @@
   let companyFilter = 'Alles';
   let companySearch = '';
   let marketFilter = 'Alles';
+  let selectedMarketAssetId = 'tulip-token';
+  let marketRange = '24u';
   let remoteLeaderboard = null;
   let remoteListings = null;
   let backendStatus = 'local';
@@ -192,6 +194,7 @@
         const profile = {
           user_id: supabaseUser.id, username: snapshot.username,
           company_income: Number(companyIncomePerTick().toFixed(2)),
+          balance: Number((snapshot.balance / 100).toFixed(2)),
           companies_count: ownedCompanyCount(),
           lifetime_earned: Number((snapshot.lifetimeEarned / 100).toFixed(2)),
           updated_at: new Date().toISOString()
@@ -331,31 +334,91 @@
 
   const MARKET_TICK_MS = 30 * 1000;
   const MARKET_HISTORY_INTERVAL_MS = 5 * 60 * 1000;
-  const MARKET_HISTORY_LIMIT = 289; // roughly 24 hours, sampled every five minutes
-  const MARKET_MAX_CATCHUP_TICKS = 30 * 24 * 60 * 2; // up to 30 offline days
+  const MARKET_HISTORY_LIMIT = 289; // 24 uur met candles van vijf minuten
+  const MARKET_MAX_CATCHUP_TICKS = 30 * 24 * 60 * 2; // maximaal 30 offline dagen
+
+  function marketHistoryFor(id) {
+    return (Array.isArray(state.marketHistory[id]) ? state.marketHistory[id] : [])
+      .map((point, index) => {
+        if (typeof point === 'number') {
+          return { at: now() - (state.marketHistory[id].length - 1 - index) * MARKET_HISTORY_INTERVAL_MS,
+            open: point, high: point, low: point, close: point, price: point, volume: 0 };
+        }
+        const close = Number(point?.close ?? point?.price) || 0;
+        if (!close) return null;
+        return {
+          at: Number(point.at) || now(),
+          open: Number(point.open) || close,
+          high: Number(point.high) || close,
+          low: Number(point.low) || close,
+          close, price: close,
+          volume: Math.max(0, Number(point.volume) || 0)
+        };
+      }).filter(Boolean);
+  }
 
   function marketChange(id) {
     const asset = C.marketAssets.find(item => item.id === id);
     if (!asset) return 0;
     const currentPrice = Number(state.marketPrices[id]) || asset.price;
-    const history = Array.isArray(state.marketHistory[id]) ? state.marketHistory[id] : [];
+    const history = marketHistoryFor(id);
     if (!history.length) return 0;
-
-    const normalized = history.map((point, index) => {
-      if (typeof point === 'number') {
-        return { at: now() - (history.length - 1 - index) * MARKET_HISTORY_INTERVAL_MS, price: point };
-      }
-      return { at: Number(point?.at) || 0, price: Number(point?.price) || 0 };
-    }).filter(point => point.price > 0);
-    if (!normalized.length) return 0;
-
     const cutoff = now() - 24 * 60 * 60 * 1000;
-    const baseline = normalized.find(point => point.at >= cutoff) || normalized[0];
-    return baseline.price ? ((currentPrice - baseline.price) / baseline.price) * 100 : 0;
+    const baseline = history.find(point => point.at >= cutoff) || history[0];
+    return baseline.close ? ((currentPrice - baseline.close) / baseline.close) * 100 : 0;
   }
 
-  // The market is a local simulation: price movement is saved with the local game.
-  // Elapsed ticks are replayed on return, so it also advances while the browser is closed.
+  function marketSeed(id) {
+    // Stable hash: every token has its own persistent cycle and no random numbers.
+    let hash = 2166136261;
+    for (const char of id) hash = Math.imul(hash ^ char.charCodeAt(0), 16777619);
+    return (hash >>> 0) / 4294967295 * Math.PI * 2;
+  }
+
+  function marketSma(values, period) {
+    if (!values.length) return 0;
+    const tail = values.slice(-period);
+    return tail.reduce((sum, value) => sum + value, 0) / tail.length;
+  }
+
+  // A deterministic, analysable simulation: multi-timeframe cycles, momentum,
+  // mean reversion and support/resistance pressure. There is deliberately no
+  // Math.random() in the market engine, so the same save and timestamps replay
+  // the same market path on every device.
+  function marketNextPrice(asset, price, history, tickAt, assetIndex) {
+    const seed = marketSeed(asset.id);
+    const tick = Math.floor(tickAt / MARKET_TICK_MS);
+    const candles = history.slice(-24);
+    const closes = candles.map(candle => candle.close).concat(price);
+    const shortSma = marketSma(closes, 6);
+    const longSma = marketSma(closes, 20);
+    const previous = closes.length > 6 ? closes[closes.length - 7] : price;
+    const momentum = previous ? clamp((price - previous) / previous, -0.018, 0.018) : 0;
+
+    // Long cycle = broader trend; mid cycle = swing; short cycle = intraday rhythm.
+    const macro = Math.sin(tick / 210 + seed);
+    const swing = Math.sin(tick / 43 + seed * 1.73);
+    const intraday = Math.sin(tick / 8.5 + seed * 2.31);
+    const trend = macro * 0.00022 + swing * 0.00011;
+    const momentumFollow = clamp(momentum * 0.018, -0.00016, 0.00016);
+    const maPressure = longSma ? clamp((shortSma - longSma) / longSma * 0.012, -0.00012, 0.00012) : 0;
+    const fairValuePull = clamp((asset.price - price) / asset.price * 0.000035, -0.00012, 0.00012);
+
+    // Recent swing levels create visible support/resistance zones.
+    const recent = candles.slice(-12);
+    const resistance = recent.length ? Math.max(...recent.map(c => c.high)) : price;
+    const support = recent.length ? Math.min(...recent.map(c => c.low)) : price;
+    const nearResistance = resistance > 0 && price >= resistance * 0.997;
+    const nearSupport = support > 0 && price <= support * 1.003;
+    const levelPressure = nearResistance ? -0.00009 : nearSupport ? 0.00009 : 0;
+
+    const volatility = Number(asset.volatility) || 0.05;
+    const repeatableWave = intraday * volatility * 0.0017 + swing * volatility * 0.00065;
+    const drift = trend + momentumFollow + maPressure + fairValuePull + levelPressure + repeatableWave;
+    const next = clamp(price * (1 + drift), asset.price * 0.15, asset.price * 7);
+    return Math.round(next * 10000) / 10000;
+  }
+
   function updateMarketPrices() {
     const current = now();
     const elapsedTicks = Math.floor((current - (Number(state.marketUpdatedAt) || current)) / MARKET_TICK_MS);
@@ -368,30 +431,35 @@
 
     C.marketAssets.forEach((asset, assetIndex) => {
       let price = Number(state.marketPrices[asset.id]) || asset.price;
-      const rawHistory = Array.isArray(state.marketHistory[asset.id]) ? state.marketHistory[asset.id] : [];
-      let history = rawHistory.map((point, index) => {
-        if (typeof point === 'number') {
-          return { at: simulationStart - (rawHistory.length - 1 - index) * MARKET_TICK_MS, price: point };
-        }
-        return { at: Number(point?.at) || simulationStart, price: Number(point?.price) || asset.price };
-      }).filter(point => point.price > 0);
-
-      if (!history.length) history.push({ at: simulationStart, price });
-      let lastSnapshotAt = history[history.length - 1].at;
-      const volatility = Number(asset.volatility) || 0.05;
+      let history = marketHistoryFor(asset.id);
+      if (!history.length) {
+        const initialBarAt = Math.floor(simulationStart / MARKET_HISTORY_INTERVAL_MS) * MARKET_HISTORY_INTERVAL_MS;
+        history.push({ at: initialBarAt, open: price, high: price, low: price, close: price, price, volume: 0 });
+      }
 
       for (let step = 1; step <= ticks; step++) {
         const tickAt = simulationStart + step * MARKET_TICK_MS;
-        const shock = (Math.random() - 0.5) * volatility;
-        const suddenNews = Math.random() < 0.006 ? (Math.random() - 0.5) * volatility * 3.2 : 0;
-        const marketCycle = Math.sin((tickAt / 60000) + assetIndex * 2.13) * 0.0009;
-        const returnToFairValue = ((asset.price - price) / asset.price) * 0.0012;
-        price = clamp(price * (1 + shock + suddenNews + marketCycle + returnToFairValue), asset.price * 0.15, asset.price * 7);
+        const previousPrice = price;
+        price = marketNextPrice(asset, price, history, tickAt, assetIndex);
+        const bucketAt = Math.floor(tickAt / MARKET_HISTORY_INTERVAL_MS) * MARKET_HISTORY_INTERVAL_MS;
+        // Volume is deterministic too and grows around larger price movement.
+        const tick = Math.floor(tickAt / MARKET_TICK_MS);
+        const seed = marketSeed(asset.id);
+        const volumeWave = 0.7 + Math.abs(Math.sin(tick / 11 + seed)) * 0.65;
+        const relativeMove = previousPrice ? Math.abs(price - previousPrice) / previousPrice : 0;
+        const volume = Math.round((8 + volumeWave * 35 + relativeMove * 18000) * 100) / 100;
+        let candle = history[history.length - 1];
 
-        if (tickAt - lastSnapshotAt >= MARKET_HISTORY_INTERVAL_MS) {
-          history.push({ at: tickAt, price: Math.round(price * 100) / 100 });
-          lastSnapshotAt = tickAt;
+        if (!candle || candle.at !== bucketAt) {
+          candle = { at: bucketAt, open: previousPrice, high: Math.max(previousPrice, price),
+            low: Math.min(previousPrice, price), close: price, price, volume: 0 };
+          history.push(candle);
         }
+        candle.high = Math.max(candle.high, price);
+        candle.low = Math.min(candle.low, price);
+        candle.close = price;
+        candle.price = price; // compatibility with older save readers
+        candle.volume = Math.round((candle.volume + volume) * 100) / 100;
       }
 
       state.marketPrices[asset.id] = Math.round(price * 100) / 100;
@@ -402,6 +470,98 @@
     save();
     return true;
   }
+
+  function marketIndicators(asset) {
+    const history = marketHistoryFor(asset.id);
+    const closes = history.map(candle => candle.close);
+    const price = Number(state.marketPrices[asset.id]) || asset.price;
+    closes.push(price);
+    const sma7 = marketSma(closes, 7);
+    const sma20 = marketSma(closes, 20);
+    const sma50 = marketSma(closes, 50);
+    const changes = closes.slice(-15).slice(1).map((value, index) => value - closes.slice(-15)[index]);
+    const gains = changes.reduce((sum, value) => sum + Math.max(0, value), 0);
+    const losses = changes.reduce((sum, value) => sum + Math.max(0, -value), 0);
+    const rs = losses === 0 ? (gains > 0 ? 100 : 1) : gains / losses;
+    const rsi = 100 - (100 / (1 + rs));
+    const recent = history.slice(-48);
+    const support = recent.length ? Math.min(...recent.map(c => c.low)) : price;
+    const resistance = recent.length ? Math.max(...recent.map(c => c.high)) : price;
+    const trend = sma20 > sma50 * 1.002 ? 'Stijgende trend' : sma20 < sma50 * 0.998 ? 'Dalende trend' : 'Zijwaarts';
+    let signal = 'Afwachten';
+    if (rsi < 34 && price >= sma7) signal = 'Mogelijke opleving';
+    else if (rsi > 68 && price < sma7) signal = 'Mogelijke afkoeling';
+    else if (sma7 > sma20 && sma20 >= sma50) signal = 'Bullish momentum';
+    else if (sma7 < sma20 && sma20 <= sma50) signal = 'Bearish momentum';
+    return { price, sma7, sma20, sma50, rsi, support, resistance, trend, signal };
+  }
+
+  function renderMarketChart() {
+    const asset = C.marketAssets.find(item => item.id === selectedMarketAssetId) || C.marketAssets[0];
+    if (!asset) return '';
+    const all = marketHistoryFor(asset.id);
+    const currentPrice = Number(state.marketPrices[asset.id]) || asset.price;
+    if (!all.length) all.push({ at: now(), open: currentPrice, high: currentPrice, low: currentPrice, close: currentPrice, price: currentPrice, volume: 0 });
+    const count = marketRange === '1u' ? 12 : marketRange === '6u' ? 72 : 289;
+    const candles = all.slice(-count);
+    const values = candles.map(c => c.close);
+    const indicators = marketIndicators(asset);
+    const width = 820, height = 290, left = 18, right = 18, top = 17, plotBottom = 207, volumeBottom = 266;
+    const plotWidth = width - left - right;
+    const lows = candles.map(c => c.low), highs = candles.map(c => c.high);
+    const minPrice = Math.min(...lows, currentPrice) * 0.992;
+    const maxPrice = Math.max(...highs, currentPrice) * 1.008;
+    const span = Math.max(0.0001, maxPrice - minPrice);
+    const y = value => top + (maxPrice - value) / span * (plotBottom - top);
+    const step = plotWidth / Math.max(1, candles.length);
+    const bodyWidth = Math.max(2, Math.min(9, step * 0.62));
+    const maxVolume = Math.max(1, ...candles.map(c => c.volume || 0));
+    const chartSupport = Math.min(...candles.map(c => c.low));
+    const chartResistance = Math.max(...candles.map(c => c.high));
+    const ema = (period) => {
+      const alpha = 2 / (period + 1);
+      let current = values[0] || currentPrice;
+      return values.map(value => (current = value * alpha + current * (1 - alpha)));
+    };
+    const ema20 = ema(20), ema50 = ema(50);
+    const line = series => series.map((value, index) => `${left + index * step + step / 2},${y(value)}`).join(' ');
+    const candlesSvg = candles.map((candle, index) => {
+      const x = left + index * step + step / 2;
+      const up = candle.close >= candle.open;
+      const color = up ? '#55c99a' : '#e87978';
+      const topY = y(Math.max(candle.open, candle.close));
+      const bottomY = y(Math.min(candle.open, candle.close));
+      const bodyHeight = Math.max(1.5, bottomY - topY);
+      const volumeHeight = (candle.volume || 0) / maxVolume * 43;
+      return `<g><title>${new Date(candle.at).toLocaleString('nl-NL')} • O ${euro(candle.open)} • H ${euro(candle.high)} • L ${euro(candle.low)} • C ${euro(candle.close)} • volume ${Math.round(candle.volume||0)}</title><line x1="${x}" y1="${y(candle.high)}" x2="${x}" y2="${y(candle.low)}" stroke="${color}" stroke-width="1.2"/><rect x="${x-bodyWidth/2}" y="${topY}" width="${bodyWidth}" height="${bodyHeight}" rx="1" fill="${color}"/><rect x="${x-bodyWidth/2}" y="${volumeBottom-volumeHeight}" width="${bodyWidth}" height="${volumeHeight}" fill="${color}" opacity=".42"/></g>`;
+    }).join('');
+    const change = marketChange(asset.id);
+    return `<section class="panel market-chart-panel">
+      <div class="market-chart-head"><div><div class="eyebrow">Koersanalyse • ${asset.origin}</div><h2>${asset.icon} ${asset.name}</h2><div class="chart-current-price">${euro(currentPrice)} <span class="${change>=0?'positive':'negative'}">${change>=0?'+':''}${change.toFixed(2)}% / 24u</span></div></div>
+        <div class="market-range-tabs">${['1u','6u','24u'].map(range=>`<button class="filter-chip ${marketRange===range?'active':''}" data-action="market-range" data-value="${range}">${range}</button>`).join('')}</div></div>
+      <div class="market-chart-wrap"><svg class="market-chart" viewBox="0 0 ${width} ${height}" role="img" aria-label="Candlestick koersgrafiek van ${esc(asset.name)}">
+        ${[0,1,2,3].map(i=>{const yy=top+i*(plotBottom-top)/3;return `<line x1="${left}" y1="${yy}" x2="${width-right}" y2="${yy}" stroke="rgba(180,200,216,.12)" stroke-dasharray="3 5"/><text x="${width-right}" y="${yy-4}" text-anchor="end" fill="#8599a9" font-size="9">${euro(maxPrice-i*span/3)}</text>`}).join('')}
+        ${candlesSvg}
+        ${chartSupport >= minPrice && chartSupport <= maxPrice ? `<line x1="${left}" y1="${y(chartSupport)}" x2="${width-right}" y2="${y(chartSupport)}" stroke="#55c99a" stroke-dasharray="4 4" opacity=".55"/><text x="${left+4}" y="${y(chartSupport)-4}" fill="#55c99a" font-size="9">STEUN</text>` : ''}
+        ${chartResistance >= minPrice && chartResistance <= maxPrice ? `<line x1="${left}" y1="${y(chartResistance)}" x2="${width-right}" y2="${y(chartResistance)}" stroke="#e87978" stroke-dasharray="4 4" opacity=".55"/><text x="${left+4}" y="${y(chartResistance)-4}" fill="#e87978" font-size="9">WEERSTAND</text>` : ''}
+        <polyline points="${line(ema20)}" fill="none" stroke="#f3bd68" stroke-width="1.6" opacity=".95"/>
+        <polyline points="${line(ema50)}" fill="none" stroke="#8db8f3" stroke-width="1.5" opacity=".9"/>
+        <line x1="${left}" y1="${volumeBottom+2}" x2="${width-right}" y2="${volumeBottom+2}" stroke="rgba(180,200,216,.16)"/>
+        <text x="${left}" y="${height-7}" fill="#8295a5" font-size="9">${candles.length?new Date(candles[0].at).toLocaleString('nl-NL',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}):''}</text>
+        <text x="${width-right}" y="${height-7}" text-anchor="end" fill="#8295a5" font-size="9">${candles.length?new Date(candles[candles.length-1].at).toLocaleString('nl-NL',{hour:'2-digit',minute:'2-digit'}):''}</text>
+      </svg></div>
+      <div class="chart-legend"><span><i class="legend-candle"></i> Candles (5 min)</span><span><i class="legend-ema20"></i> EMA 20</span><span><i class="legend-ema50"></i> EMA 50</span><span><i class="legend-volume"></i> Volume</span><span>┄ Steun / weerstand</span></div>
+      <div class="market-indicators">
+        <div><small>Trend</small><b>${indicators.trend}</b></div>
+        <div><small>RSI (14)</small><b class="${indicators.rsi<34?'positive':indicators.rsi>68?'negative':''}">${indicators.rsi.toFixed(1)}</b></div>
+        <div><small>Steun (48 candles)</small><b>${euro(indicators.support)}</b></div>
+        <div><small>Weerstand (48 candles)</small><b>${euro(indicators.resistance)}</b></div>
+        <div class="market-signal"><small>Technisch signaal</small><b>${indicators.signal}</b></div>
+      </div>
+      <p class="hint market-chart-hint">Lees de grafiek als een trader: candles tonen open/hoog/laag/slot, EMA 20 en EMA 50 tonen kortere en langere trend, RSI helpt oververhitting herkennen en steun/weerstand tonen recente prijszones. De markt gebruikt vaste cycli en trendregels in plaats van willekeurige koerssprongen; dit blijft een spelmodel, geen zekere voorspelling.</p>
+    </section>`;
+  }
+
   function renderMarket() {
     updateMarketPrices();
     const holdingsTotal=Object.entries(state.holdings).reduce((sum,[id,qty])=>{
@@ -410,13 +570,14 @@
     const assets=C.marketAssets.filter(asset=>marketFilter==='Alles'||asset.origin===marketFilter);
     const origins=['Alles','Nederland','Friesland','Noord-Brabant','Bollenstreek','Gouda','Amsterdam','Oranje sport'];
     return `
-      <div class="page-heading"><div><div class="eyebrow">Holland_Market • fictieve handelsmarkt</div><h1>De Nederlandse markt</h1><p class="lede">Verhandel Nederlandse thema-items alsof het kleine crypto-tokens zijn. Prijzen bewegen automatisch; dit is speelgeld en geen echte crypto.</p></div><div class="panel soft"><small class="small-meta">Portfolio-waarde</small><h2 style="color:var(--orange2);margin:4px 0 0">${euro(holdingsTotal)}</h2><small class="small-meta">${Object.values(state.holdings).reduce((a,b)=>a+b,0)} tokens in bezit</small></div></div>
+      <div class="page-heading"><div><div class="eyebrow">Holland_Market • fictieve handelsmarkt</div><h1>De Nederlandse markt</h1><p class="lede">Verhandel Nederlandse thema-items alsof het crypto-tokens zijn. Bestudeer trends, candles, RSI, EMA en steun/weerstand om je handelsmoment te kiezen. Koersen blijven offline bewegen.</p></div><div class="panel soft"><small class="small-meta">Portfolio-waarde</small><h2 style="color:var(--orange2);margin:4px 0 0">${euro(holdingsTotal)}</h2><small class="small-meta">${Object.values(state.holdings).reduce((a,b)=>a+b,0)} tokens in bezit</small></div></div>
       <div class="tag-row" style="margin-bottom:13px">${origins.map(o=>`<button class="filter-chip ${marketFilter===o?'active':''}" data-action="market-filter" data-value="${o}">${o}</button>`).join('')}</div>
-      <div class="market-grid"><section class="panel"><div class="toolbar" style="justify-content:space-between"><h2>Tokenmarkt</h2><span class="pill">Nieuwe koersen elke 30 sec • ook offline</span></div><div style="overflow-x:auto"><table class="market-table"><thead><tr><th>Item</th><th>Prijs</th><th>24u</th><th>In bezit</th><th>Actie</th></tr></thead><tbody>${assets.map(asset=>{
+      <div class="market-grid"><section class="panel"><div class="toolbar" style="justify-content:space-between"><h2>Tokenmarkt</h2><span class="pill">Vaste koerscycli • candles per 5 min • offline</span></div><div style="overflow-x:auto"><table class="market-table"><thead><tr><th>Item</th><th>Prijs</th><th>24u</th><th>In bezit</th><th>Actie</th></tr></thead><tbody>${assets.map(asset=>{
         const price=Number(state.marketPrices[asset.id])||asset.price;const change=marketChange(asset.id);const qty=Number(state.holdings[asset.id])||0;
-        return `<tr><td><div class="asset-name"><span class="asset-emoji">${asset.icon}</span><span><b>${asset.name}</b><small>${asset.origin}</small></span></div></td><td><b>${euro(price)}</b></td><td class="${change>=0?'positive':'negative'}">${change>=0?'+':''}${change.toFixed(1)}%</td><td>${qty}</td><td><div class="toolbar"><button class="btn tiny" data-action="market-buy" data-id="${asset.id}" ${state.balance>=cents(price)?'':'disabled'}>Koop</button><button class="btn tiny secondary" data-action="market-sell" data-id="${asset.id}" ${qty>0?'':'disabled'}>Verkoop</button></div></td></tr>`;
-      }).join('')}</tbody></table></div><p class="hint" style="margin:12px 0 0">De procentuele verandering vergelijkt de koers met ongeveer 24 uur geleden. Prijzen zijn fictief, worden lokaal opgeslagen en lopen door wanneer je later terugkomt.</p></section>
-      <aside class="panel"><div class="eyebrow">Mijn portefeuille</div><h2>Jouw tokens</h2>${Object.entries(state.holdings).filter(([,qty])=>qty>0).length?Object.entries(state.holdings).filter(([,qty])=>qty>0).map(([id,qty])=>{const a=C.marketAssets.find(x=>x.id===id);return `<div class="portfolio-row"><span>${a?.icon||'📦'} ${a?.name||id} <small class="small-meta">× ${qty}</small></span><b>${euro((state.marketPrices[id]||a?.price||0)*qty)}</b></div>`}).join(''):`<div class="empty-state"><div class="empty-icon">📉</div><b>Nog geen tokens</b><p>Koop een Nederlands thema-item om je portefeuille te starten.</p></div>`}</aside></div>`;
+        return `<tr class="${selectedMarketAssetId===asset.id?'selected-market-row':''}"><td><button class="asset-select" data-action="market-select" data-id="${asset.id}"><span class="asset-emoji">${asset.icon}</span><span><b>${asset.name}</b><small>${asset.origin}</small></span></button></td><td><b>${euro(price)}</b></td><td class="${change>=0?'positive':'negative'}">${change>=0?'+':''}${change.toFixed(1)}%</td><td>${qty}</td><td><div class="toolbar"><button class="btn tiny" data-action="market-buy" data-id="${asset.id}" ${state.balance>=cents(price)?'':'disabled'}>Koop</button><button class="btn tiny secondary" data-action="market-sell" data-id="${asset.id}" ${qty>0?'':'disabled'}>Verkoop</button></div></td></tr>`;
+      }).join('')}</tbody></table></div><p class="hint" style="margin:12px 0 0">Selecteer een token om de koersgrafiek te bekijken. Oude koersdata uit je bestaande save wordt automatisch omgezet naar candles.</p></section>
+      <aside class="panel"><div class="eyebrow">Mijn portefeuille</div><h2>Jouw tokens</h2>${Object.entries(state.holdings).filter(([,qty])=>qty>0).length?Object.entries(state.holdings).filter(([,qty])=>qty>0).map(([id,qty])=>{const a=C.marketAssets.find(x=>x.id===id);return `<div class="portfolio-row"><span>${a?.icon||'📦'} ${a?.name||id} <small class="small-meta">× ${qty}</small></span><b>${euro((state.marketPrices[id]||a?.price||0)*qty)}</b></div>`}).join(''):`<div class="empty-state"><div class="empty-icon">📉</div><b>Nog geen tokens</b><p>Koop een Nederlands thema-item om je portefeuille te starten.</p></div>`}</aside></div>
+      ${renderMarketChart()}`;
   }
 
   function renderCrates() {
@@ -448,21 +609,21 @@
   }
 
   const sampleLeaderboard = [
-    {username:'TulpenTycoon',income:4850,companies:14},
-    {username:'BredaBoss',income:2175,companies:11},
-    {username:'FrieseKapitein',income:980,companies:8},
-    {username:'PolderPower',income:440,companies:5},
-    {username:'Oranje boven',income:125,companies:3}
+    {username:'TulpenTycoon',balance:128450.75,income:4850,companies:14},
+    {username:'BredaBoss',balance:42750.20,income:2175,companies:11},
+    {username:'FrieseKapitein',balance:18990.00,income:980,companies:8},
+    {username:'PolderPower',balance:6240.50,income:440,companies:5},
+    {username:'Oranje boven',balance:850.00,income:125,companies:3}
   ];
   function renderLeaderboard() {
-    const mine={username:state.username,income:companyIncomePerTick(),companies:ownedCompanyCount(),me:true};
+    const mine={username:state.username,balance:(Number(state.balance)||0)/100,income:companyIncomePerTick(),companies:ownedCompanyCount(),me:true};
     const baseRows = remoteLeaderboard ? remoteLeaderboard.filter(x => x.username !== state.username) : sampleLeaderboard.filter(x => x.username !== state.username);
     let rows=[...baseRows,mine];
     rows=rows.sort((a,b)=>Number(b.income)-Number(a.income));
     return `
-      <div class="page-heading"><div><div class="eyebrow">Leaderboard • bedrijfsinkomen</div><h1>Wie runt het grootste imperium?</h1><p class="lede">De ranglijst sorteert op het inkomen dat bedrijven per vijf minuten opleveren, niet op je totale saldo.</p></div><span class="pill">${backendStatus==='online'?'Online ranking':'Demo ranking'}</span></div>
-      <div class="backend-note"><span>🌐</span><span><strong>${backendStatus==='online'?'Online leaderboard actief.':'Leaderboard in demo-modus.'}</strong> ${backendStatus==='online'?'Je bedrijfsinkomen wordt met je username gedeeld. Je volledige save blijft privé.':'Vul de Supabase-configuratie in en voer backend/schema.sql uit om spelers met elkaar te vergelijken.'}</span></div>
-      <section class="panel"><div class="toolbar" style="justify-content:space-between;margin-bottom:8px"><h2>Top bedrijvenbouwers</h2><span class="pill">Inkomen per 5 minuten</span></div><div style="overflow-x:auto"><table class="leaderboard-table"><thead><tr><th>#</th><th>Speler</th><th>Bedrijven</th><th>Inkomen / 5 min</th></tr></thead><tbody>${rows.map((row,index)=>`<tr class="${row.me?'me':''}"><td class="rank">${index===0?'👑':index+1}</td><td><b>${esc(row.username)}</b>${row.me?' <span class="pill">JIJ</span>':''}</td><td>${intFmt.format(row.companies||0)}</td><td class="positive">${euro(row.income)}</td></tr>`).join('')}</tbody></table></div></section>`;
+      <div class="page-heading"><div><div class="eyebrow">Leaderboard • vermogen & bedrijfsinkomen</div><h1>Wie runt het grootste imperium?</h1><p class="lede">Je ziet nu zowel het actuele Kaasmunten-saldo als het inkomen dat bedrijven iedere vijf minuten opleveren. De ranglijst blijft gesorteerd op bedrijfsinkomen.</p></div><span class="pill">${backendStatus==='online'?'Online ranking':'Demo ranking'}</span></div>
+      <div class="backend-note"><span>🌐</span><span><strong>${backendStatus==='online'?'Online leaderboard actief.':'Leaderboard in demo-modus.'}</strong> ${backendStatus==='online'?'Je username, Kaasmunten-saldo en bedrijfsinkomen worden gedeeld. Je volledige save blijft privé.':'Vul de Supabase-configuratie in en voer backend/schema.sql uit om spelers met elkaar te vergelijken.'}</span></div>
+      <section class="panel"><div class="toolbar" style="justify-content:space-between;margin-bottom:8px"><h2>Top bedrijvenbouwers</h2><span class="pill">Gesorteerd op inkomen / 5 min</span></div><div style="overflow-x:auto"><table class="leaderboard-table"><thead><tr><th>#</th><th>Speler</th><th>Kaasmunten</th><th>Bedrijven</th><th>Inkomen / 5 min</th></tr></thead><tbody>${rows.map((row,index)=>`<tr class="${row.me?'me':''}"><td class="rank">${index===0?'👑':index+1}</td><td><b>${esc(row.username)}</b>${row.me?' <span class="pill">JIJ</span>':''}</td><td class="positive">${euro(row.balance)}</td><td>${intFmt.format(row.companies||0)}</td><td class="positive">${euro(row.income)}</td></tr>`).join('')}</tbody></table></div></section>`;
   }
 
   function buyCompany(id) {
@@ -821,6 +982,8 @@
     if(action==='work-filter'){workFilter=value;renderTab();}
     else if(action==='company-filter'){companyFilter=value;renderTab();}
     else if(action==='market-filter'){marketFilter=value;renderTab();}
+    else if(action==='market-select'){selectedMarketAssetId=id;renderTab();}
+    else if(action==='market-range'){marketRange=value;renderTab();}
     else if(action==='buy-company') buyCompany(id);
     else if(action==='market-buy') marketBuy(id);
     else if(action==='market-sell') marketSell(id);
@@ -917,8 +1080,8 @@
         await syncCloudSave();
 
         try {
-          const profiles = await supabaseRequest('player_profiles?select=username,company_income,companies_count&order=company_income.desc&limit=50');
-          remoteLeaderboard = (profiles || []).map(p => ({ username: p.username,
+          const profiles = await supabaseRequest('player_profiles?select=username,balance,company_income,companies_count&order=company_income.desc&limit=50');
+          remoteLeaderboard = (profiles || []).map(p => ({ username: p.username, balance: Number(p.balance) || 0,
             income: Number(p.company_income) || 0, companies: Number(p.companies_count) || 0 }));
         } catch (leaderboardError) {
           console.warn('Leaderboard niet beschikbaar:', leaderboardError.message || leaderboardError);
@@ -987,8 +1150,8 @@
       if(now()-lastSocialRefresh>60000){
         lastSocialRefresh=now();
         try {
-          const profiles=await supabaseRequest('player_profiles?select=username,company_income,companies_count&order=company_income.desc&limit=50');
-          remoteLeaderboard=(profiles||[]).map(p=>({username:p.username,income:Number(p.company_income)||0,companies:Number(p.companies_count)||0}));
+          const profiles=await supabaseRequest('player_profiles?select=username,balance,company_income,companies_count&order=company_income.desc&limit=50');
+          remoteLeaderboard=(profiles||[]).map(p=>({username:p.username,balance:Number(p.balance)||0,income:Number(p.company_income)||0,companies:Number(p.companies_count)||0}));
         } catch(error) { console.warn('Leaderboard verversen mislukt:',error.message||error); }
         try {
           const listings=await supabaseRequest('ah_listings?select=id,seller_id,seller_username,item_id,item_name,rarity,price,status,created_at&status=eq.active&order=created_at.desc&limit=100');

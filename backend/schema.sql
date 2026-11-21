@@ -7,12 +7,14 @@ create table if not exists public.player_profiles (
   user_id uuid primary key references auth.users(id) on delete cascade,
   username text not null unique check (char_length(username) between 3 and 18),
   company_income numeric(18,2) not null default 0 check (company_income >= 0),
+  balance numeric(18,2) not null default 0 check (balance >= 0),
   companies_count integer not null default 0 check (companies_count >= 0),
   lifetime_earned numeric(18,2) not null default 0 check (lifetime_earned >= 0),
   updated_at timestamptz not null default now()
 );
 
 alter table public.player_profiles add column if not exists lifetime_earned numeric(18,2) not null default 0;
+alter table public.player_profiles add column if not exists balance numeric(18,2) not null default 0;
 alter table public.player_profiles add column if not exists updated_at timestamptz not null default now();
 
 -- Private, complete player save. Each authenticated player can read/write only their own row.
@@ -159,6 +161,7 @@ $$;
 revoke all on function public.purchase_ah_listing(uuid) from public;
 grant execute on function public.purchase_ah_listing(uuid) to authenticated;
 
--- Note: the save is a trusted-friends prototype. The public leaderboard exposes only
--- username/company income; wallet, inventory and other save_data stay private per player.
+-- Note: the save is a trusted-friends prototype. The public leaderboard exposes
+-- username, current Kaasmunten balance, company income and company count; inventory
+-- and the full save_data stay private per player.
 -- The client writes its own account row using Supabase Auth + RLS (no service key in browser).

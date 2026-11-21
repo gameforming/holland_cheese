@@ -35,8 +35,8 @@ const server = http.createServer(async (req, res) => {
   }
   try {
     if (req.method === 'GET' && url.pathname === '/api/leaderboard') {
-      const players = await supabaseGet('player_profiles?select=username,company_income,companies_count&order=company_income.desc&limit=50');
-      return send(res, 200, { players: players.map(p => ({ username: p.username, income: Number(p.company_income) || 0, companies: Number(p.companies_count) || 0 })) });
+      const players = await supabaseGet('player_profiles?select=username,balance,company_income,companies_count&order=company_income.desc&limit=50');
+      return send(res, 200, { players: players.map(p => ({ username: p.username, balance: Number(p.balance) || 0, income: Number(p.company_income) || 0, companies: Number(p.companies_count) || 0 })) });
     }
     if (req.method === 'GET' && url.pathname === '/api/ah/listings') {
       const listings = await supabaseGet('ah_listings?select=id,seller_username,item_id,item_name,rarity,price,status,created_at&status=eq.active&order=created_at.desc&limit=100');

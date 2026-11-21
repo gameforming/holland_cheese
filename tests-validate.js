@@ -33,7 +33,12 @@ assert(C.marketAssets.some(item => item.origin === 'Noord-Brabant'), 'Missing Br
 assert(C.marketAssets.every(item => item.volatility > 0), 'Market assets need different volatility settings.');
 assert(app.includes('MARKET_TICK_MS') && app.includes('MARKET_HISTORY_INTERVAL_MS'), 'Missing local simulated market clock/history.');
 assert(app.includes('MARKET_MAX_CATCHUP_TICKS'), 'Missing offline market catch-up.');
-assert(app.includes('Nieuwe koersen elke 30 sec • ook offline'), 'Market UI should explain offline price movement.');
+assert(app.includes('Vaste koerscycli • candles per 5 min • offline'), 'Market UI should explain deterministic offline candles.');
+assert(app.includes('marketNextPrice') && app.includes('marketSeed'), 'Market must use deterministic repeatable price movement.');
+const marketEngine = app.slice(app.indexOf('function marketNextPrice'), app.indexOf('function updateMarketPrices'));
+assert(!marketEngine.includes('Math.random'), 'Market price engine must not use random movement.');
+assert(app.includes('EMA 20') && app.includes('EMA 50') && app.includes('RSI (14)'), 'Market chart must show technical indicators.');
+assert(app.includes('market-select') && app.includes('market-range'), 'Market chart must support asset and time-range selection.');
 assert(!C.marketAssets.some(item => /kaas/i.test(item.name)), 'Cheese must stay currency, not a market item.');
 
 const html = read('index.html');
@@ -48,5 +53,11 @@ assert(!app.includes('window.supabase?.createClient'), 'Supabase should not depe
 assert(app.includes("rpc/purchase_ah_listing"), 'Missing online auction purchase integration.');
 assert(sql.includes('create or replace function public.purchase_ah_listing'), 'Missing atomic Holland_AH purchase function.');
 assert(sql.includes('enable row level security'), 'Supabase tables must use row-level security.');
+
+assert(app.includes('balance: Number((snapshot.balance / 100).toFixed(2))'), 'Cloud leaderboard must publish current Kaasmunten balance in major units.');
+assert(app.includes('<th>Kaasmunten</th>') && app.includes('euro(row.balance)'), "Leaderboard must display each player Kaasmunten balance.");
+assert(app.includes('select=username,balance,company_income,companies_count'), 'Supabase leaderboard query must fetch the balance column.');
+assert(read('backend/server.js').includes('balance: Number(p.balance) || 0'), 'Render leaderboard API must include player balance.');
+assert(sql.includes('add column if not exists balance numeric(18,2)'), 'Supabase schema must safely add the public balance column for existing projects.');
 
 console.log(`Validated ${C.games.length} minigames, ${C.companies.length} companies, ${C.marketAssets.length} market assets, ${C.crates.length} crates, local/cloud save hooks, and online auction schema.`);

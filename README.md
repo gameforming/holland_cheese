@@ -1,6 +1,13 @@
-# Holland_Game — economy prototype 2.1
+# Holland_Game — economy prototype 2.2
 
 Een lichte, mobiele 2D-browsergame die direct werkt op GitHub Pages. De fabriek is voorlopig uitgeschakeld; de eerste focus is geld verdienen, bedrijven kopen en Nederlandse verzamelobjecten verzamelen.
+
+## In deze versie — 2.3 Market Charts
+
+- Nieuwe technische candlestick-grafieken met OHLC, volume, EMA 20/50, RSI 14, steun en weerstand.
+- De marktprijs-engine is deterministisch en gebruikt geen random koerssprongen: dezelfde save en tijdstappen leveren dezelfde koersen op.
+- Selecteer tokens en perioden van 1 uur, 6 uur of 24 uur.
+- Je bestaande `config.js` is in deze release niet gewijzigd; je ingevulde Supabase- en Render-waarden blijven behouden wanneer je alleen de andere projectbestanden vervangt.
 
 ## In deze versie
 
@@ -10,12 +17,12 @@ Een lichte, mobiele 2D-browsergame die direct werkt op GitHub Pages. De fabriek 
 - Drie moeilijkheidsniveaus. Hogere moeilijkheid vermenigvuldigt de beloning.
 - **112 bedrijven**, van een limonadekraam van 50 KM (0,50 KM per vijf minuten) tot loodgieters, kappers, horeca, zorg, transport, landbouw, recycling, energie, AI, chipmachines, ruimtevaart en wereldconcerns. Er zijn meerdere opties in iedere prijsklasse.
 - Bedrijven betalen iedere vijf minuten automatisch uit. Gemiste uitbetalingsrondes worden bij het opnieuw openen van de game verwerkt.
-- Holland_Market is een **fictieve speelgeldmarkt**, met Nederlandse thema-items. Daarin zitten ook Friese items (Pompeblêd/Skûtsje) en Brabantse items (worstenbroodje/Bossche kermis). Koersen bewegen iedere 30 seconden, hebben verschillende volatiliteit, koersschokken en een lichte terugkeer naar de basiswaarde. Koershistorie wordt lokaal bewaard en offline ingehaald bij terugkomst. Geen echte crypto.
+- Holland_Market is een **fictieve speelgeldmarkt**, met Nederlandse thema-items. Daarin zitten ook Friese items (Pompeblêd/Skûtsje) en Brabantse items (worstenbroodje/Bossche kermis). Koersen bewegen iedere 30 seconden met vaste, herhaalbare trendcycli, momentum, mean reversion en steun/weerstand; het marktsysteem gebruikt geen willekeurige koersbewegingen. De markt toont candlesticks (open/hoog/laag/slot), volume, EMA 20/50, RSI 14, 24-uurs verandering en steun-/weerstandsniveaus. Kies grafiekperioden van 1, 6 of 24 uur. Koershistorie wordt lokaal bewaard en offline ingehaald bij terugkomst. Oudere koershistorie uit saves wordt automatisch als candles ingelezen. Het blijft fictieve speelgeldmarkt, geen echte crypto en indicatoren zijn geen gegarandeerde voorspelling.
 - Crates met zichtbare kansen en zes rarities: Common, Uncommon, Rare, Epic, Legendary en Mythic. De collectie loopt van een winkelwagentje tot de Burj Khalifa.
 - Holland_AH ondersteunt lokale demo-aanbiedingen en gedeelde spelersaanbiedingen via Supabase; online aankopen betalen de verkoper en leveren het item aan de koper in één database-transactie.
 - **Offline-first:** de game blijft volledig speelbaar zonder internet. Voortgang en marktkoersen worden direct in `localStorage` opgeslagen; als je later weer opent, worden bedrijfssalarissen en gemiste marktbewegingen ingehaald. Supabase is optioneel als extra cloudkopie.
 - Supabase Anonymous Auth maakt automatisch een speleraccount aan; vrienden hoeven geen wachtwoord of registratieformulier te gebruiken.
-- De publieke leaderboardtabel bevat alleen username, bedrijfsinkomen en aantal bedrijven. De volledige save is privé voor de speler. Holland_AH gebruikt een databasefunctie voor een atomaire aankoop: de koper betaalt, krijgt het item en de verkoper ontvangt de Kaasmunten in dezelfde transactie.
+- De publieke leaderboardtabel toont username, huidig Kaasmunten-saldo, bedrijfsinkomen per vijf minuten en aantal bedrijven. De ranglijst blijft gerangschikt op bedrijfsinkomen. Het saldo is dus zichtbaar voor vrienden op de online ranglijst; inventaris en de volledige save blijven privé voor de speler. Holland_AH gebruikt een databasefunctie voor een atomaire aankoop: de koper betaalt, krijgt het item en de verkoper ontvangt de Kaasmunten in dezelfde transactie.
 - Alleen de Kaasmunten hebben een eigen SVG-illustratie. De overige objecten gebruiken tijdelijke emoji/UI-symbolen die later door eigen tekeningen vervangen kunnen worden.
 
 ## Supabase instellen (cloud saves + leaderboard)
@@ -36,7 +43,7 @@ window.HOLLAND_CONFIG = {
 5. Commit `config.js` naar GitHub en herlaad de Pages-site.
 6. In de footer moet **Supabase + lokaal opgeslagen** verschijnen. De eerste keer maakt de game automatisch een anonieme speler aan. Iedere wijziging wordt eerst lokaal opgeslagen en daarna naar Supabase gesynchroniseerd.
 
-De Supabase anon/publishable key is bedoeld voor de browser. **Zet nooit de `service_role` key in `config.js`, HTML of JavaScript.** De save-tabel is met Row Level Security afgeschermd: iedere speler kan alleen zijn eigen save lezen en schrijven. De leaderboardprofielen zijn publiek leesbaar, maar bevatten geen wallet of inventaris.
+De Supabase anon/publishable key is bedoeld voor de browser. **Zet nooit de `service_role` key in `config.js`, HTML of JavaScript.** De save-tabel is met Row Level Security afgeschermd: iedere speler kan alleen zijn eigen save lezen en schrijven. De leaderboardprofielen zijn publiek leesbaar en bevatten bewust het huidige Kaasmunten-saldo plus bedrijfsinkomen en aantal bedrijven. De volledige save en inventaris blijven privé. Als je de SQL al eerder hebt uitgevoerd, voer je het bijgewerkte `backend/schema.sql` opnieuw uit: de nieuwe `balance`-kolom wordt veilig toegevoegd met `ADD COLUMN IF NOT EXISTS`.
 
 Spelers krijgen automatisch een anoniem account; hun sessie staat in de browseropslag. Wie de browsergegevens wist, kan die anonieme account niet herstellen met alleen de username. Voeg later e-mail-, Discord- of andere accountkoppeling toe als spelers op meerdere apparaten moeten kunnen inloggen.
 
@@ -84,3 +91,9 @@ js/app.js
 backend/server.js
 backend/schema.sql
 ```
+
+## Holland_Game 2.3 — grafieken en config behouden
+
+Deze update voegt een candlestick-markt toe: open/hoog/laag/slot, volume, EMA 20, EMA 50, RSI 14 en zichtbare steun-/weerstandszones. Je kunt tussen 1 uur, 6 uur en 24 uur wisselen en per token een grafiek openen. De marktengine gebruikt vaste, herhaalbare cycli, trend/momentum en mean reversion; de koerssprongen zelf zijn niet willekeurig. Het blijft een spelmodel en geen gegarandeerde voorspeller.
+
+**Belangrijk bij deze ZIP:** `config.js` is bewust niet opgenomen, omdat daarin jouw eigen Supabase- en Render-instellingen staan. Laat de bestaande `config.js` in je GitHub-repository staan. Upload/vervang alle bestanden uit deze ZIP, maar verwijder of vervang je bestaande `config.js` niet. `index.html` blijft die bestaande `config.js` laden.

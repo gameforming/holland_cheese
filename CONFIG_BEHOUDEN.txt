@@ -1,0 +1,10 @@
+Holland_Game 2.3 — lees dit voor je uploadt
+
+Deze volledige projectupdate bevat bewust GEEN config.js.
+Je bestaande config.js bevat jouw eigen Supabase URL, publieke anon key en Render API URL.
+
+Upload/vervang alle bestanden uit deze ZIP in de root van je GitHub repository.
+Laat het bestaande config.js-bestand in GitHub ongemoeid en verwijder het niet.
+index.html laadt nog steeds ./config.js.
+
+Als je GitHub's upload-scherm gebruikt: upload de bestanden uit de ZIP; voeg geen nieuw config.js toe.

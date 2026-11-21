@@ -1,0 +1,10 @@
+Holland_Game 2.3 — Market Charts
+
+- Candlestick-chart voor elk marktitem (OHLC + volume).
+- EMA 20, EMA 50, RSI 14, steun en weerstand.
+- Grafiekperioden 1 uur, 6 uur en 24 uur.
+- Koersbewegingen zijn deterministisch (vaste cycli, momentum, mean reversion en steun-/weerstand) en dus niet willekeurig.
+- Bestaande LocalStorage- en Supabase-saves blijven compatibel; oude prijspunten worden automatisch als candles weergegeven.
+- config.js is ongewijzigd meegenomen. De ingevulde Supabase URL, anon key en Render URL zijn niet vervangen.
+
+Publiceer door de volledige ZIP over de bestanden in de root van je GitHub-repository te uploaden.

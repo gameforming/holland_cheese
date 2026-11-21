@@ -18,6 +18,7 @@ function element(id) {
   });
   return elements.get(id);
 }
+let clickHandler = null;
 const documentMock = {
   visibilityState: 'visible',
   querySelector(selector) {
@@ -30,7 +31,7 @@ const documentMock = {
       .map(tab => ({ dataset: { tab }, classList: { toggle() {} } }));
     return [];
   },
-  addEventListener() {}
+  addEventListener(type, handler) { if (type === 'click') clickHandler = handler; }
 };
 const savedState = {
   version: 2, username: 'SavedTest', balance: 12345, lifetimeEarned: 12345, companyEarned: 0,
@@ -52,4 +53,12 @@ await new Promise(resolve => setTimeout(resolve, 0));
 if (!element('tabContent').innerHTML.includes('10 minigames')) throw new Error('Work tab did not render.');
 if (element('balance').textContent !== '123,45') throw new Error(`Existing save was not loaded: ${element('balance').textContent}`);
 if (element('usernameLabel').textContent !== 'SavedTest') throw new Error('Existing username was not restored.');
-console.log('Runtime smoke test passed: existing local save and Work tab render correctly.');
+clickHandler?.({ target: { closest: selector => selector === '[data-tab]' ? { dataset: { tab: 'leaderboard' } } : null } });
+const leaderboard = element('tabContent').innerHTML;
+if (!leaderboard.includes('<th>Kaasmunten</th>')) throw new Error('Leaderboard does not show the Kaasmunten column.');
+if (!leaderboard.includes('KM 123,45')) throw new Error('Leaderboard does not show the saved current Kaasmunten balance.');
+clickHandler?.({ target: { closest: selector => selector === '[data-tab]' ? { dataset: { tab: 'market' } } : null } });
+const market = element('tabContent').innerHTML;
+if (!market.includes('market-chart') || !market.includes('Candles (5 min)')) throw new Error('Market candlestick chart did not render.');
+if (!market.includes('EMA 20') || !market.includes('RSI (14)') || !market.includes('STEUN')) throw new Error('Market technical indicators did not render.');
+console.log('Runtime smoke test passed: local save, Kaasmunten leaderboard, and market candlestick charts rendered.');

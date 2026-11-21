@@ -1,4 +1,4 @@
-HOLLAND_GAME 2.0 — REPLACE THE OLD FACTORY PROTOTYPE
+HOLLAND_GAME 2.2 — REPLACE THE OLD FACTORY PROTOTYPE
 
 This is now a plain static website. It does NOT use Vite, React, npm install, or a dist/ folder.
 
